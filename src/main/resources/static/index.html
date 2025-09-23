@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Allergy app</title>
+    <link href="/static/tooplate-minimal-white-style.css" rel="stylesheet">
+</head>
+<body>
+
+
+<div class="unauthenticated">
+    <nav>
+        <div class="nav-container">
+            <a href="/" class="logo">Allergy</a>
+        </div>
+    </nav>
+    <section id="contact" class="contact">
+        <div class="container" style="text-align:center;">
+            <a class="cta-button" href="/oauth2/authorization/google">Click here to sign in</a>
+        </div>
+    </section>
+</div>
+
+
+<div class="authenticated" style="display: none;">
+    <nav id="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">Allergy</a>
+            <div class="menu-toggle" id="menuToggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="" onclick="logout()" class="nav-link">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+
+
+    <section id="home" class="hero">
+        <div class="floating-objects">
+            <div class="floating-circle"></div>
+            <div class="floating-circle"></div>
+            <div class="floating-square"></div>
+            <div class="floating-line"></div>
+        </div>
+
+
+        <div class="hero-content">
+            <h1>Scan for product</h1>
+            <div class="contact-form">
+                <form>
+                    <div class="form-group">
+                        <input type="text" placeholder=" " required id="barcode">
+                        <label>Barcode</label>
+                    </div>
+                    <button type="submit" class="submit-btn">Submit</button>
+                </form>
+            </div>
+            <div class="black-line"></div>
+            <a class="cta-button" id="open-scanner" onClick="startScan()">Open scanner</a>
+            <a class="cta-button" id="close-scanner" style="display: none;" onClick="stopScan()">Close scanner</a>
+            <div id="reader" style="width: 500px;"></div>
+        </div>
+    </section>
+    <section id="about" class="about">
+        <div class="container" id="scan-results">
+
+        </div>
+    </section>
+</div>
+<footer>
+    <p>© 2025 Deposoft kft</p>
+</footer>
+<script src="/static/tooplate-minimal-script.js"></script>
+<script type="text/javascript" src="/webjars/jquery/jquery.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script type="text/javascript" src="/webjars/js-cookie/js.cookie.js"></script>
+<script type="text/javascript">
+    $.ajaxSetup({
+        beforeSend: function (xhr, settings) {
+            if (settings.type == 'POST' || settings.type == 'PUT'
+                || settings.type == 'DELETE') {
+                if (!(/^http:.*/.test(settings.url) || /^https:.*/
+                    .test(settings.url))) {
+                    // Only send the token to relative URLs i.e. locally.
+                    xhr.setRequestHeader("X-XSRF-TOKEN", Cookies
+                        .get('XSRF-TOKEN'));
+                }
+            }
+        }
+    });
+    $.get("/users/me", function (data) {
+        $("#user").html(data.name);
+        $(".unauthenticated").hide();
+        $(".authenticated").show();
+    });
+    var logout = function () {
+        $.post("/logout", function () {
+            $("#user").html('');
+            $(".unauthenticated").show();
+            $(".authenticated").hide();
+        })
+        return true;
+    }
+
+    var loadProduct = function (barcode) {
+        console.log(barcode);
+        $.get("/allergic-ingredients/product/" + barcode, function (data) {
+            var html = '';
+            if (data) {
+                html += '<div class="services-header">';
+                if (data.allergicIngredients && data.allergicIngredients.length > 0) {
+                    html += '<h2>You are allergic !</h2>';
+                }
+                html += '<h3>' + data.product.name + '</h3>';
+                html += '</div>';
+
+
+                if (data.product.ingredients) {
+                    data.product.ingredients.forEach(function (ingredient) {
+
+                        if (data.allergicIngredients && data.allergicIngredients.indexOf(ingredient) > -1) {
+                            html += '<div class="service-small">\n' +
+                                '                    <h3>' + ingredient + '</h3>\n' +
+                                '                    <a onclick="removeIngredient(\'' + ingredient.trim() + '\',\'' + barcode + '\');" class="service-tag service-small-tag" style="float: right;">I am not\n' +
+                                '                        allergic</a>\n' +
+                                '                </div>\n' +
+                                '            </div>';
+                        } else {
+                            html += '<div id="ingredients">\n' +
+                                '                <div class="service-large">\n' +
+                                '                    <h3>' + ingredient + '</h3>\n' +
+                                '                    <a onclick="addIngredient(\'' + ingredient.trim() + '\',\'' + barcode + '\');" class="service-tag" style="float: right;">I am allergic</a>\n' +
+                                '                </div>\n';
+                        }
+                    });
+                } else {
+                    html += '< class="services-header"><h2>No ingredients information available.</h2></div>';
+                }
+
+            } else {
+                html += '<div class="services-header"><h2>Cannot find product!</h2></div>';
+            }
+            $("#scan-results").html(html);
+        });
+    }
+
+    var addIngredient = function (ingredient, barcode) {
+        $.ajax({
+            type: "PUT",
+            url: '/allergic-ingredients/' + ingredient,
+            success: function () {
+                loadProduct(barcode);
+            }
+        });
+    }
+
+    var removeIngredient = function (ingredient, barcode) {
+        $.ajax({
+            type: "DELETE",
+            url: '/allergic-ingredients/' + ingredient,
+            success: function () {
+                loadProduct(barcode);
+            }
+        });
+    }
+
+
+    const html5Qrcode = new Html5Qrcode('reader');
+    const startScan = function () {
+        html5Qrcode.start({facingMode: "environment"}, config, qrCodeSuccessCallback);
+        $("#open-scanner").hide();
+        $("#close-scanner").show();
+        $("#scan-results").html("");
+    }
+    const stopScan = function () {
+        html5Qrcode.stop();
+        $("#open-scanner").show();
+        $("#close-scanner").hide();
+    }
+
+    const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+        if (decodedText) {
+            loadProduct(decodedText);
+            stopScan();
+        }
+    }
+    const config = {fps: 10, qrbox: {width: 250, height: 250}}
+</script>
+</body>
+</html>
